@@ -10,8 +10,19 @@
     "test": "jest"
   },
   "dependencies": {
+    "@react-navigation/native": "^7.0.14",
+    "@react-navigation/stack": "^7.1.1",
+    "buffer": "^6.0.3",
     "react": "19.0.0",
-    "react-native": "0.78.0"
+    "react-native": "0.78.0",
+    "react-native-fs": "^2.20.0",
+    "react-native-gesture-handler": "^2.24.0",
+    "react-native-network-info": "^5.2.1",
+    "react-native-safe-area-context": "^5.2.0",
+    "react-native-screens": "^4.9.0",
+    "react-native-udp": "^4.1.7",
+    "react-native-vector-icons": "^10.2.0",
+    "react-navigation": "^5.0.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
