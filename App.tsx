@@ -4,6 +4,7 @@ import { createStackNavigator } from '@react-navigation/stack';
 import MainScreen from './screens/MainScreen.tsx';
 import MessageScreen from './screens/MessageScreen.tsx';
 import FileTransferScreen from './screens/FileTransferScreen.tsx';
+import { SocketProvider } from './providers/SocketProvider.tsx';
 
 export type RootStackParamList = {
   Main: undefined;
@@ -14,16 +15,18 @@ export type RootStackParamList = {
 const Stack = createStackNavigator<RootStackParamList>();
 
 
-function App():React.JSX.Element {
+function App(): React.JSX.Element {
   return (
-    <NavigationContainer>
-      <Stack.Navigator initialRouteName="Main">
-        <Stack.Screen name="Main" component={MainScreen} options={{ title: "Device List" }} />
-        <Stack.Screen name="Message" component={MessageScreen} options={{ title: "Send Message" }} />
-        <Stack.Screen name="FileTransfer" component={FileTransferScreen} options={{ title: "Send File" }} />
-      </Stack.Navigator>
-    </NavigationContainer>
+    <SocketProvider>
+      <NavigationContainer>
+        <Stack.Navigator initialRouteName="Main">
+          <Stack.Screen name="Main" component={MainScreen} options={{ title: 'Device List' }} />
+          <Stack.Screen name="Message" component={MessageScreen} options={{ title: 'Send Message' }} />
+          <Stack.Screen name="FileTransfer" component={FileTransferScreen} options={{ title: 'Send File' }} />
+        </Stack.Navigator>
+      </NavigationContainer>
+    </SocketProvider>
   );
-};
+}
 
 export default App;

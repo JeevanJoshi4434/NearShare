@@ -1,32 +1,20 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { View, Text, Button } from 'react-native';
 import RNFS from 'react-native-fs';
-import dgram from 'react-native-udp';
 import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../App';
 import { Buffer } from 'buffer';
+import { DISCOVERY_PORT, useSocket } from '../providers/SocketProvider';
 
 type Props = {
     route: RouteProp<RootStackParamList, 'FileTransfer'>;
 };
 
-const PORT = 55555;
+const PORT = DISCOVERY_PORT;
 
 const FileTransferScreen: React.FC<Props> = ({ route }) => {
     const { deviceIP } = route.params;
-    const socket = dgram.createSocket({
-        type: 'udp4',
-    });
-
-    useEffect((): any => {
-        try {
-            socket.bind(PORT, () => console.log('"Socket bound for file transfer"'));
-            return () => socket.close();
-        } catch (error) {
-            return () => socket.close();
-        }
-    }, [socket]);
-
+    const {socket} = useSocket();
     const sendFile = async () => {
         try {
 
@@ -35,7 +23,7 @@ const FileTransferScreen: React.FC<Props> = ({ route }) => {
             const fileBuffer = Buffer.from(fileData, 'base64');
 
             const message = JSON.stringify({ type: 'FILE', chunk: fileBuffer.toString('base64') });
-            socket.send(Buffer.from(message), 0, message.length, PORT, deviceIP, (err) => {
+            socket?.send(Buffer.from(message), 0, message.length, PORT, deviceIP, (err) => {
                 if (err) {
                     console.log('"File Send Error:"', err);
                 }
