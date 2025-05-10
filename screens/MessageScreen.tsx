@@ -19,36 +19,68 @@ interface Message {
 }
 
 const MessageScreen: React.FC<Props> = ({ route, navigation }) => {
-    let {socket} = useSocket();
+    const { socket, deviceName } = useSocket();
     const { deviceIP, myIP } = route.params;
     const [message, setMessage] = useState('');
     const [receivedMessages, setReceivedMessages] = useState<Message[]>([]);
 
     useEffect(() => {
-        const handleExit = () => {
-            console.log('Exiting chat... returning to main screen.');
-            navigation.navigate('Main');
+        // Define message handler
+        const handleMessage = (msg: Buffer, rinfo: any) => {
+            try {
+                const data = JSON.parse(msg.toString());
+                if (data.type === 'MESSAGE' && rinfo.address === deviceIP) {
+                    console.log(`Received message: ${data.text} from ${rinfo.address}`);
+                    setReceivedMessages(prev => [
+                        ...prev,
+                        {
+                            text: data.text,
+                            sender: rinfo.address,
+                            timestamp: new Date().toLocaleTimeString(),
+                        },
+                    ]);
+                } else if (data.type === 'CONNECTION_REQUEST') {
+                    Alert.alert(
+                        'Connection Request',
+                        `${data.senderName || 'Someone'} (${rinfo.address}) wants to connect with you.`,
+                        [
+                            { 
+                                text: 'Decline', 
+                                style: 'cancel',
+                                onPress: () => sendConnectionResponse(rinfo.address, false) 
+                            },
+                            { 
+                                text: 'Accept', 
+                                onPress: () => {
+                                    sendConnectionResponse(rinfo.address, true);
+                                    if (deviceIP !== rinfo.address) {
+                                        navigation.replace('Message', { 
+                                            deviceIP: rinfo.address, 
+                                            myIP 
+                                        });
+                                    }
+                                } 
+                            },
+                        ]
+                    );
+                } else if (data.type === 'CHAT_ENDED' && rinfo.address === deviceIP) {
+                    // If the other user ended the chat, show notification and return to main
+                    Alert.alert(
+                        'Chat Ended',
+                        `The other user has ended the chat.`,
+                        [{ text: 'OK', onPress: () => navigation.navigate('Main') }]
+                    );
+                }
+            } catch (error) {
+                console.error('Error parsing message:', error);
+            }
         };
 
-            socket?.on('message', (msg, rinfo) => {
-                try {
-                    console.log({status:'Received message', msg});
-                    const data = JSON.parse(msg.toString());
-                    if (data.type === 'MESSAGE') {
-                        console.log(`Received message: ${data.text} from ${rinfo.address}`);
-                        setReceivedMessages(prev => [
-                            ...prev,
-                            {
-                                text: data.text,
-                                sender: rinfo.address,
-                                timestamp: new Date().toLocaleTimeString(),
-                            },
-                        ]);
-                    }
-                } catch (error) {
-                    console.error('Error parsing message:', error);
-                }
-            });
+        // First remove any existing listeners to prevent duplicates
+        socket?.removeAllListeners('message');
+        
+        // Add the message listener
+        socket?.on('message', handleMessage);
 
         // Handle Back Button
         const backAction = () => {
@@ -57,19 +89,54 @@ const MessageScreen: React.FC<Props> = ({ route, navigation }) => {
                 'Are you sure you want to leave the chat?',
                 [
                     { text: 'Cancel', style: 'cancel', onPress: () => null },
-                    { text: 'Exit', onPress: handleExit },
+                    { text: 'Exit', onPress: () => handleExit() },
                 ]
             );
             return true;
         };
 
+        const handleExit = () => {
+            // Send notification to other user that we're leaving
+            if (socket && myIP) {
+                try {
+                    const exitMsg = JSON.stringify({
+                        type: 'CHAT_ENDED',
+                        sender: myIP,
+                        senderName: deviceName
+                    });
+                    
+                    socket.send(
+                        Buffer.from(exitMsg),
+                        0,
+                        exitMsg.length,
+                        DISCOVERY_PORT,
+                        deviceIP,
+                        (err) => {
+                            if (err) {
+                                console.error('Failed to send exit notification:', err);
+                            } else {
+                                console.log('Exit notification sent');
+                            }
+                        }
+                    );
+                } catch (error) {
+                    console.error('Error sending exit notification:', error);
+                }
+            }
+            
+            // Navigate back to main screen
+            navigation.navigate('Main');
+        };
+
         BackHandler.addEventListener('hardwareBackPress', backAction);
 
+        // Return cleanup function
         return () => {
-            console.log('Cleaning up...');
-            // BackHandler.removeEventListener('hardwareBackPress', backAction);
+            // Remove the message listener when component unmounts
+            socket?.removeListener('message', handleMessage);
+            BackHandler.removeEventListener('hardwareBackPress', backAction);
         };
-    }, [socket, navigation]);
+    }, [socket, navigation, deviceIP, myIP, deviceName]);
 
     const sendMessage = () => {
         if (!message.trim() || !myIP){
@@ -99,6 +166,35 @@ const MessageScreen: React.FC<Props> = ({ route, navigation }) => {
             setMessage('');
         } catch (error) {
             console.error('Error sending message:', error);
+        }
+    };
+
+    const sendConnectionResponse = (targetIP: string, accepted: boolean) => {
+        if (!socket || !myIP) return;
+        
+        try {
+            const response = JSON.stringify({
+                type: 'CONNECTION_RESPONSE',
+                accepted,
+                sender: myIP
+            });
+            
+            socket.send(
+                Buffer.from(response),
+                0,
+                response.length,
+                DISCOVERY_PORT,
+                targetIP,
+                (err) => {
+                    if (err) {
+                        console.error('Failed to send connection response:', err);
+                    } else {
+                        console.log(`Connection ${accepted ? 'accepted' : 'declined'}`);
+                    }
+                }
+            );
+        } catch (error) {
+            console.error('Error sending connection response:', error);
         }
     };
 
