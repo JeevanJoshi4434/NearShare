@@ -45,8 +45,9 @@ const MainScreen: React.FC<Props> = ({ navigation }) => {
                 }
                 if (data.type === 'DISCOVERY_RESPONSE') {
                     setDevices(prev => {
-                        const exists = prev.some(dev => dev.ip === rinfo.address);
-                        return exists ? prev : [...prev, { ip: rinfo.address, name: data.deviceName }];
+                        const ipFromMessage = data.ip || rinfo.address;
+                        const exists = prev.some(dev => dev.ip === ipFromMessage);
+                        return exists ? prev : [...prev, { ip: ipFromMessage, name: data.deviceName }];
                     });
                 }
             });
@@ -61,7 +62,7 @@ const MainScreen: React.FC<Props> = ({ navigation }) => {
                     console.log(`Discovery request received from ${rinfo.address}`);
 
                     // Send response back with the actual or random device name
-                    const response = JSON.stringify({ type: 'DISCOVERY_RESPONSE', deviceName });
+                    const response = JSON.stringify({ type: 'DISCOVERY_RESPONSE', deviceName, ip: myIP });
                     socket.send(Buffer.from(response), 0, response.length, DISCOVERY_PORT, rinfo.address, (err) => {
                         if (err) {
                             console.log('Error sending response:', err);
