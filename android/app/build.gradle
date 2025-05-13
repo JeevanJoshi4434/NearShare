@@ -84,6 +84,11 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
         versionName "1.0"
+        // Add this line to disable Hermes temporarily
+        // This is to help debug native module issues
+        // Remove or set to true to enable Hermes again
+        // Note: This is an example, adjust as needed
+        // ndk { abiFilters "armeabi-v7a", "x86" }
     }
     signingConfigs {
         debug {

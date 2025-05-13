@@ -1,26 +1,74 @@
-import React from 'react';
-import { View, Button, Platform } from 'react-native';
-import * as DocumentPicker from 'expo-document-picker';
+import React, { useEffect, useState } from 'react';
+import { View, Text, Button, FlatList, TouchableOpacity, Alert, PermissionsAndroid, Platform } from 'react-native';
+import RNFS from 'react-native-fs';
 
 type FilePickerProps = {
   onFileSelected: (uri: string, name: string, size: number) => void;
 };
 
 const FilePicker: React.FC<FilePickerProps> = ({ onFileSelected }) => {
-  const pickFile = async () => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({});
-      if (result.type === 'success') {
-        onFileSelected(result.uri, result.name, result.size ?? 0);
+  const [files, setFiles] = useState<RNFS.ReadDirItem[]>([]);
+  const [hasPermission, setHasPermission] = useState(false);
+
+  useEffect(() => {
+    const requestPermission = async () => {
+      if (Platform.OS === 'android') {
+        try {
+          const granted = await PermissionsAndroid.request(
+            PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
+            {
+              title: 'Storage Permission',
+              message: 'App needs access to your storage to select files',
+              buttonNeutral: 'Ask Me Later',
+              buttonNegative: 'Cancel',
+              buttonPositive: 'OK',
+            },
+          );
+          setHasPermission(granted === PermissionsAndroid.RESULTS.GRANTED);
+        } catch (err) {
+          Alert.alert('Permission Error', 'Failed to request permission');
+        }
+      } else {
+        setHasPermission(true);
       }
-    } catch (error) {
-      console.error('Error picking file:', error);
+    };
+
+    requestPermission();
+  }, []);
+
+  useEffect(() => {
+    if (hasPermission) {
+      RNFS.readDir(RNFS.DocumentDirectoryPath)
+        .then((result) => {
+          setFiles(result);
+        })
+        .catch(() => {
+          Alert.alert('Error', 'Failed to read files');
+        });
+    }
+  }, [hasPermission]);
+
+  const handleFilePress = (file: RNFS.ReadDirItem) => {
+    if (file.isFile()) {
+      onFileSelected(file.path, file.name, file.size);
+    } else {
+      Alert.alert('Selection Error', 'Please select a file, not a folder');
     }
   };
 
   return (
-    <View>
-      <Button title="Select File" onPress={pickFile} />
+    <View style={{ flex: 1 }}>
+      <Text style={{ fontWeight: 'bold', marginBottom: 8 }}>Select a file:</Text>
+      <FlatList
+        data={files}
+        keyExtractor={(item) => item.path}
+        renderItem={({ item }) => (
+          <TouchableOpacity onPress={() => handleFilePress(item)} style={{ padding: 10, borderBottomWidth: 1, borderColor: '#ccc' }}>
+            <Text>{item.name}</Text>
+          </TouchableOpacity>
+        )}
+        ListEmptyComponent={<Text>No files found in Documents directory.</Text>}
+      />
     </View>
   );
 };
