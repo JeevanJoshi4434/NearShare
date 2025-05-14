@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Button, FlatList, TouchableOpacity, Alert, PermissionsAndroid, Platform } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, Alert, PermissionsAndroid, Platform } from 'react-native';
 import RNFS from 'react-native-fs';
 
 type FilePickerProps = {
@@ -14,7 +14,7 @@ const FilePicker: React.FC<FilePickerProps> = ({ onFileSelected }) => {
     const requestPermission = async () => {
       if (Platform.OS === 'android') {
         try {
-          const granted = await PermissionsAndroid.request(
+          const readGranted = await PermissionsAndroid.request(
             PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
             {
               title: 'Storage Permission',
@@ -24,9 +24,25 @@ const FilePicker: React.FC<FilePickerProps> = ({ onFileSelected }) => {
               buttonPositive: 'OK',
             },
           );
-          setHasPermission(granted === PermissionsAndroid.RESULTS.GRANTED);
+          const writeGranted = await PermissionsAndroid.request(
+            PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
+            {
+              title: 'Storage Permission',
+              message: 'App needs write access to your storage to send files',
+              buttonNeutral: 'Ask Me Later',
+              buttonNegative: 'Cancel',
+              buttonPositive: 'OK',
+            },
+          );
+          if (readGranted === PermissionsAndroid.RESULTS.GRANTED && writeGranted === PermissionsAndroid.RESULTS.GRANTED) {
+            setHasPermission(true);
+          } else {
+            Alert.alert('Permission Denied', 'Storage permissions are required to select and send files.');
+            setHasPermission(false);
+          }
         } catch (err) {
           Alert.alert('Permission Error', 'Failed to request permission');
+          setHasPermission(false);
         }
       } else {
         setHasPermission(true);
@@ -38,7 +54,9 @@ const FilePicker: React.FC<FilePickerProps> = ({ onFileSelected }) => {
 
   useEffect(() => {
     if (hasPermission) {
-      RNFS.readDir(RNFS.DocumentDirectoryPath)
+      // Read files from external storage directory on Android, fallback to DocumentDirectoryPath on iOS
+      const path = Platform.OS === 'android' ? RNFS.ExternalStorageDirectoryPath : RNFS.DocumentDirectoryPath;
+      RNFS.readDir(path)
         .then((result) => {
           setFiles(result);
         })
@@ -67,7 +85,7 @@ const FilePicker: React.FC<FilePickerProps> = ({ onFileSelected }) => {
             <Text>{item.name}</Text>
           </TouchableOpacity>
         )}
-        ListEmptyComponent={<Text>No files found in Documents directory.</Text>}
+        ListEmptyComponent={<Text>No files found in storage directory.</Text>}
       />
     </View>
   );
