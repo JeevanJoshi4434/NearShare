@@ -121,8 +121,8 @@ const MainScreen: React.FC<Props> = ({ navigation }) => {
         
         // Return cleanup function
         return () => {
-            // Remove the message listener when component unmounts
-            socket?.removeListener('message', handleMessage);
+        // Remove the message listener when component unmounts
+        socket?.off('message', handleMessage);
         };
     }, [myIP, socket, navigation, deviceName]);
 

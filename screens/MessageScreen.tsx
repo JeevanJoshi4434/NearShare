@@ -11,7 +11,6 @@ type Props = {
     navigation: StackNavigationProp<RootStackParamList, 'Message'>;
 };
 
-
 interface Message {
     text: string;
     sender: string;
@@ -134,7 +133,11 @@ const MessageScreen: React.FC<Props> = ({ route, navigation }) => {
         return () => {
             // Remove the message listener when component unmounts
             socket?.removeListener('message', handleMessage);
-            BackHandler.removeEventListener('hardwareBackPress', backAction);
+            // BackHandler.removeEventListener is deprecated and not in type definitions
+            // Use remove() method instead if available
+            if (BackHandler.remove) {
+                BackHandler.remove('hardwareBackPress', backAction);
+            }
         };
     }, [socket, navigation, deviceIP, myIP, deviceName]);
 
@@ -220,6 +223,10 @@ const MessageScreen: React.FC<Props> = ({ route, navigation }) => {
                 onChangeText={setMessage}
             />
             <Button title="Send" onPress={sendMessage} />
+            <Button
+                title="Send File"
+                onPress={() => navigation.navigate('FileTransfer', { deviceIP })}
+            />
         </View>
     );
 };
