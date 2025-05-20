@@ -1,95 +1,58 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, Alert, PermissionsAndroid, Platform } from 'react-native';
-import RNFS from 'react-native-fs';
+import React from 'react';
+import { View, Text, Button, StyleSheet } from 'react-native';
+import { pick } from '@react-native-documents/picker';
 
 type FilePickerProps = {
-  onFileSelected: (uri: string, name: string|null, size: number|null) => void;
+  onFileSelected: (uri: string, name: string, size: number) => void;
 };
 
 const FilePicker: React.FC<FilePickerProps> = ({ onFileSelected }) => {
 
-  const [files, setFiles] = useState<RNFS.ReadDirItem[]>([]);
-  const [hasPermission, setHasPermission] = useState(false);
-
-  useEffect(() => {
-    const requestPermission = async () => {
-      if (Platform.OS === 'android') {
-        try {
-          const readGranted = await PermissionsAndroid.request(
-            PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
-            {
-              title: 'Storage Permission',
-              message: 'App needs access to your storage to select files',
-              buttonNeutral: 'Ask Me Later',
-              buttonNegative: 'Cancel',
-              buttonPositive: 'OK',
-            },
-          );
-          const writeGranted = await PermissionsAndroid.request(
-            PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
-            {
-              title: 'Storage Permission',
-              message: 'App needs write access to your storage to send files',
-              buttonNeutral: 'Ask Me Later',
-              buttonNegative: 'Cancel',
-              buttonPositive: 'OK',
-            },
-          );
-          if (readGranted === PermissionsAndroid.RESULTS.GRANTED && writeGranted === PermissionsAndroid.RESULTS.GRANTED) {
-            setHasPermission(true);
-          } else {
-            Alert.alert('Permission Denied', 'Storage permissions are required to select and send files.');
-            setHasPermission(false);
-          }
-        } catch (err) {
-          Alert.alert('Permission Error', 'Failed to request permission');
-          setHasPermission(false);
+  const pickFile = async () => {
+    try {
+      const result = await pick({
+        type: '*/*',
+      });
+      // pick returns an array of files
+      if (result.length > 0) {
+        const file = result[0];
+        if (file.size === null) {
+          throw new Error('File size is null');
         }
-      } else {
-        setHasPermission(true);
+        if (file.name === null) {
+          throw new Error('File name is null');
+        }
+        onFileSelected(file.uri, file.name, file.size);
       }
-    };
-
-    requestPermission();
-  }, []);
-
-  useEffect(() => {
-    if (hasPermission) {
-      // Read files from external storage directory on Android, fallback to DocumentDirectoryPath on iOS
-      const path = Platform.OS === 'android' ? RNFS.ExternalStorageDirectoryPath : RNFS.DocumentDirectoryPath;
-      RNFS.readDir(path)
-        .then((result) => {
-          setFiles(result);
-        })
-        .catch(() => {
-          Alert.alert('Error', 'Failed to read files');
-        });
-    }
-  }, [hasPermission]);
-
-  const handleFilePress = (file: RNFS.ReadDirItem) => {
-    if (file.isFile()) {
-      onFileSelected(file.path, file.name, file.size);
-    } else {
-      Alert.alert('Selection Error', 'Please select a file, not a folder');
+    } catch (error) {
+      if (error instanceof Error && error.message === 'User cancelled document picker') {
+        // User cancelled the picker
+        console.log('User cancelled document picker');
+      } else {
+        console.error('Error picking file:', error);
+      }
     }
   };
 
   return (
-    <View style={{ flex: 1 }}>
-      <Text style={{ fontWeight: 'bold', marginBottom: 8 }}>Select a file:</Text>
-      <FlatList
-        data={files}
-        keyExtractor={(item) => item.path}
-        renderItem={({ item }) => (
-          <TouchableOpacity onPress={() => handleFilePress(item)} style={{ padding: 10, borderBottomWidth: 1, borderColor: '#ccc' }}>
-            <Text>{item.name}</Text>
-          </TouchableOpacity>
-        )}
-        ListEmptyComponent={<Text>No files found in storage directory.</Text>}
+    <View style={styles.container}>
+      <Text style={styles.title}>Select a file:</Text>
+      <Button
+        title="Browse Files"
+        onPress={pickFile}
       />
     </View>
   );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    padding: 16,
+  },
+  title: {
+    fontWeight: 'bold',
+    marginBottom: 16,
+  },
+});
 
 export default FilePicker;

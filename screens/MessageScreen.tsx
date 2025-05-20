@@ -1,10 +1,12 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, Button, StyleSheet, ScrollView, BackHandler, Alert } from 'react-native';
+import { View, Text, TextInput, ScrollView, StyleSheet, Alert, BackHandler, TouchableOpacity } from 'react-native';
 import { RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../App';
+import { useSocket, DISCOVERY_PORT } from '../providers/SocketProvider';
 import { Buffer } from 'buffer';
-import { DISCOVERY_PORT, useSocket } from '../providers/SocketProvider';
+import Icon from 'react-native-vector-icons/Feather';
 
 type Props = {
     route: RouteProp<RootStackParamList, 'Message'>;
@@ -43,22 +45,22 @@ const MessageScreen: React.FC<Props> = ({ route, navigation }) => {
                         'Connection Request',
                         `${data.senderName || 'Someone'} (${rinfo.address}) wants to connect with you.`,
                         [
-                            { 
-                                text: 'Decline', 
+                            {
+                                text: 'Decline',
                                 style: 'cancel',
-                                onPress: () => sendConnectionResponse(rinfo.address, false) 
+                                onPress: () => sendConnectionResponse(rinfo.address, false),
                             },
-                            { 
-                                text: 'Accept', 
+                            {
+                                text: 'Accept',
                                 onPress: () => {
                                     sendConnectionResponse(rinfo.address, true);
                                     if (deviceIP !== rinfo.address) {
-                                        navigation.replace('Message', { 
-                                            deviceIP: rinfo.address, 
-                                            myIP 
+                                        navigation.replace('Message', {
+                                            deviceIP: rinfo.address,
+                                            myIP,
                                         });
                                     }
-                                } 
+                                },
                             },
                         ]
                     );
@@ -66,7 +68,7 @@ const MessageScreen: React.FC<Props> = ({ route, navigation }) => {
                     // If the other user ended the chat, show notification and return to main
                     Alert.alert(
                         'Chat Ended',
-                        `The other user has ended the chat.`,
+                        'The other user has ended the chat.',
                         [{ text: 'OK', onPress: () => navigation.navigate('Main') }]
                     );
                 }
@@ -77,7 +79,7 @@ const MessageScreen: React.FC<Props> = ({ route, navigation }) => {
 
         // First remove any existing listeners to prevent duplicates
         socket?.removeAllListeners('message');
-        
+
         // Add the message listener
         socket?.on('message', handleMessage);
 
@@ -101,9 +103,9 @@ const MessageScreen: React.FC<Props> = ({ route, navigation }) => {
                     const exitMsg = JSON.stringify({
                         type: 'CHAT_ENDED',
                         sender: myIP,
-                        senderName: deviceName
+                        senderName: deviceName,
                     });
-                    
+
                     socket.send(
                         Buffer.from(exitMsg),
                         0,
@@ -122,7 +124,7 @@ const MessageScreen: React.FC<Props> = ({ route, navigation }) => {
                     console.error('Error sending exit notification:', error);
                 }
             }
-            
+
             // Navigate back to main screen
             navigation.navigate('Main');
         };
@@ -142,7 +144,7 @@ const MessageScreen: React.FC<Props> = ({ route, navigation }) => {
     }, [socket, navigation, deviceIP, myIP, deviceName]);
 
     const sendMessage = () => {
-        if (!message.trim() || !myIP){
+        if (!message.trim() || !myIP) {
             return;
         }
         console.log(socket);
@@ -152,13 +154,13 @@ const MessageScreen: React.FC<Props> = ({ route, navigation }) => {
                 text: message,
                 sender: myIP,
             });
-            console.log({status:'Preprocessing message', msg});
+            console.log({ status: 'Preprocessing message', msg });
             socket?.send(Buffer.from(msg), 0, msg.length, DISCOVERY_PORT, deviceIP, (err) => {
-                if (err){
-                    console.error({status:'Failed to send message', err});
-                    }
+                if (err) {
+                    console.error({ status: 'Failed to send message', err });
+                }
                 else {
-                    console.log({status:'Message sent', msg});
+                    console.log({ status: 'Message sent', msg });
                 }
             });
 
@@ -173,15 +175,17 @@ const MessageScreen: React.FC<Props> = ({ route, navigation }) => {
     };
 
     const sendConnectionResponse = (targetIP: string, accepted: boolean) => {
-        if (!socket || !myIP) return;
-        
+        if (!socket || !myIP){
+            return;
+        }
+
         try {
             const response = JSON.stringify({
                 type: 'CONNECTION_RESPONSE',
                 accepted,
-                sender: myIP
+                sender: myIP,
             });
-            
+
             socket.send(
                 Buffer.from(response),
                 0,
@@ -203,54 +207,153 @@ const MessageScreen: React.FC<Props> = ({ route, navigation }) => {
 
     return (
         <View style={styles.container}>
-            <Text>Chat with {deviceIP}</Text>
-            <ScrollView style={styles.messagesContainer}>
+            <Text style={styles.headerText}>Chat with {deviceIP}</Text>
+            <ScrollView
+                style={styles.messagesContainer}
+                ref={ref => {
+                    if (ref) {
+                        ref.scrollToEnd({ animated: true });
+                    }
+                }}
+            >
                 {receivedMessages.map((msg, index) => (
                     <View key={index} style={[
                         styles.messageContainer,
                         msg.sender === myIP ? styles.sentMessage : styles.receivedMessage,
                     ]}>
-                        <Text style={styles.messageText}>{msg.text}</Text>
-                        <Text style={styles.timestamp}>{msg.timestamp}</Text>
+                        <Text style={[
+                            styles.messageText,
+                            msg.sender === myIP ? styles.sentMessageText : styles.receivedMessageText,
+                        ]}>
+                            {msg.text}
+                        </Text>
+                        <Text style={[
+                            styles.timestamp,
+                            msg.sender === myIP ? styles.sentTimestamp : styles.receivedTimestamp,
+                        ]}>
+                            {msg.timestamp}
+                        </Text>
                     </View>
                 ))}
             </ScrollView>
 
-            <TextInput
-                style={styles.input}
-                placeholder="Enter message"
-                value={message}
-                onChangeText={setMessage}
-            />
-            <Button title="Send" onPress={sendMessage} />
-            <Button
-                title="Send File"
-                onPress={() => navigation.navigate('FileTransfer', { deviceIP })}
-            />
+            <View style={styles.inputContainer}>
+                <TextInput
+                    style={styles.input}
+                    placeholder="Enter message"
+                    value={message}
+                    onChangeText={setMessage}
+                    multiline={false}
+                    returnKeyType="send"
+                    onSubmitEditing={sendMessage}
+                />
+                <View style={styles.buttonContainer}>
+                    <TouchableOpacity
+                        style={styles.sendButton}
+                        onPress={sendMessage}
+                        disabled={!message.trim()}
+                    >
+                        {/* <Icon name="send" size={24} color="#fff" /> */}
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={styles.attachButton}
+                        onPress={() => navigation.navigate('FileTransfer', { deviceIP })}
+                    >
+                        <Icon name="send" size={24} color="#fff" />
+                    </TouchableOpacity>
+                </View>
+            </View>
         </View>
     );
 };
 
 const styles = StyleSheet.create({
-    container: { flex: 1, padding: 20 },
-    messagesContainer: { flex: 1, marginVertical: 10 },
+    container: {
+        flex: 1,
+        padding: 10,
+        backgroundColor: '#f5f5f5',
+    },
+    headerText: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        marginBottom: 10,
+        textAlign: 'center',
+    },
+    messagesContainer: {
+        flex: 1,
+        marginVertical: 10,
+    },
     messageContainer: {
         padding: 10,
-        borderRadius: 10,
-        marginBottom: 5,
+        borderRadius: 15,
+        marginBottom: 8,
         maxWidth: '75%',
+        elevation: 1,
     },
     sentMessage: {
         alignSelf: 'flex-end',
-        backgroundColor: '#007bff', // Blue for sender
+        backgroundColor: '#007bff',
+        borderBottomRightRadius: 5,
     },
     receivedMessage: {
         alignSelf: 'flex-start',
-        backgroundColor: '#e0e0e0', // Gray for receiver
+        backgroundColor: '#e0e0e0',
+        borderBottomLeftRadius: 5,
     },
-    messageText: { fontSize: 16, color: 'white' },
-    timestamp: { fontSize: 12, color: 'white', marginTop: 3, textAlign: 'right' },
-    input: { borderWidth: 1, padding: 10, marginVertical: 10 },
+    messageText: {
+        fontSize: 16,
+    },
+    sentMessageText: {
+        color: 'white',
+    },
+    receivedMessageText: {
+        color: 'black',
+    },
+    timestamp: {
+        fontSize: 12,
+        marginTop: 3,
+        textAlign: 'right',
+    },
+    sentTimestamp: {
+        color: 'rgba(255, 255, 255, 0.7)',
+    },
+    receivedTimestamp: {
+        color: 'rgba(0, 0, 0, 0.5)',
+    },
+    inputContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 5,
+    },
+    input: {
+        flex: 1,
+        borderWidth: 1,
+        borderColor: '#ddd',
+        borderRadius: 20,
+        padding: 10,
+        backgroundColor: 'white',
+        marginRight: 8,
+    },
+    buttonContainer: {
+        flexDirection: 'row',
+    },
+    sendButton: {
+        backgroundColor: '#007bff',
+        borderRadius: 25,
+        width: 45,
+        height: 45,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 8,
+    },
+    attachButton: {
+        backgroundColor: '#4CAF50',
+        borderRadius: 25,
+        width: 45,
+        height: 45,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
 });
 
 export default MessageScreen;

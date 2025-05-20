@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { View, Text, Button, StyleSheet, Alert } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, Button, StyleSheet, Alert, AppState, AppStateStatus } from 'react-native';
 import { RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../App';
@@ -14,6 +14,21 @@ type Props = {
 const ConnectionRequestScreen: React.FC<Props> = ({ route, navigation }) => {
   const { deviceIP, deviceName: targetDeviceName, myIP } = route.params;
   const { socket, deviceName } = useSocket();
+  const [connectionStatus, setConnectionStatus] = useState<string>('');
+  const appState = useRef(AppState.currentState);
+  const [appStateVisible, setAppStateVisible] = useState(appState.current);
+
+  // Track app state changes
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      appState.current = nextAppState;
+      setAppStateVisible(appState.current);
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
 
   useEffect(() => {
     // Define message handler
@@ -27,11 +42,17 @@ const ConnectionRequestScreen: React.FC<Props> = ({ route, navigation }) => {
             // Navigate to message screen if accepted
             navigation.replace('Message', { deviceIP, myIP });
           } else {
-            Alert.alert(
-              'Connection Declined',
-              `${targetDeviceName} declined your connection request.`,
-              [{ text: 'OK', onPress: () => navigation.goBack() }]
-            );
+            // Check if app is in foreground before showing alert
+            if (appStateVisible === 'active') {
+              Alert.alert(
+                'Connection Declined',
+                `${targetDeviceName} declined your connection request.`,
+                [{ text: 'OK', onPress: () => navigation.goBack() }]
+              );
+            } else {
+              // If app is not in foreground, update status and handle when app becomes active
+              setConnectionStatus('declined');
+            }
           }
         }
       } catch (error) {
@@ -49,7 +70,19 @@ const ConnectionRequestScreen: React.FC<Props> = ({ route, navigation }) => {
       // Remove the message listener when component unmounts
       socket?.removeListener('message', handleMessage);
     };
-  }, [deviceIP, targetDeviceName, myIP, navigation, socket]);
+  }, [deviceIP, targetDeviceName, myIP, navigation, socket, appStateVisible]);
+
+  // Handle connection status changes when app comes to foreground
+  useEffect(() => {
+    if (appStateVisible === 'active' && connectionStatus === 'declined') {
+      Alert.alert(
+        'Connection Declined',
+        `${targetDeviceName} declined your connection request.`,
+        [{ text: 'OK', onPress: () => navigation.goBack() }]
+      );
+      setConnectionStatus('');
+    }
+  }, [appStateVisible, connectionStatus, navigation, targetDeviceName]);
 
   const sendConnectionRequest = () => {
     if (!socket || !myIP) return;
@@ -70,7 +103,13 @@ const ConnectionRequestScreen: React.FC<Props> = ({ route, navigation }) => {
         (err) => {
           if (err) {
             console.error('Failed to send connection request:', err);
-            Alert.alert('Error', 'Failed to send connection request');
+            // Check if app is in foreground before showing alert
+            if (appStateVisible === 'active') {
+              Alert.alert('Error', 'Failed to send connection request');
+            } else {
+              // Log error but don't show alert if app is in background
+              console.error('Error sending connection request (app in background):', err);
+            }
           } else {
             console.log('Connection request sent');
           }
@@ -78,6 +117,15 @@ const ConnectionRequestScreen: React.FC<Props> = ({ route, navigation }) => {
       );
     } catch (error) {
       console.error('Error sending connection request:', error);
+    }
+  };
+
+  // Safe alert function that only shows alerts when app is in foreground
+  const safeAlert = (title: string, message: string, buttons?: any[]) => {
+    if (appStateVisible === 'active') {
+      Alert.alert(title, message, buttons);
+    } else {
+      console.log(`Alert suppressed (app in background): ${title} - ${message}`);
     }
   };
 

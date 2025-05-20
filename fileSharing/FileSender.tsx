@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import React, { useState, useEffect } from 'react';
 import { Buffer } from 'buffer';
 import RNFS from 'react-native-fs';
@@ -13,7 +14,9 @@ type FileSenderProps = {
   targetIP: string;
 };
 
-const CHUNK_SIZE = 60000; // UDP packet size limit, keep below 64KB
+// Increase chunk size for better performance
+// 8KB is a good balance between speed and reliability for UDP
+const CHUNK_SIZE = 8192;
 
 const FileSender: React.FC<FileSenderProps> = ({
   fileUri,
@@ -30,11 +33,26 @@ const FileSender: React.FC<FileSenderProps> = ({
   // State to track if file sending is in progress
   const [isSending, setIsSending] = useState(false);
 
+  // Function to validate base64 string
+  const isValidBase64 = (str: string): boolean => {
+    try {
+      // Check if the string contains only valid base64 characters
+      return /^[A-Za-z0-9+/]*={0,2}$/.test(str);
+    } catch (e) {
+      return false;
+    }
+  };
+
   // Effect to send file when fileUri or other dependencies change
   useEffect(() => {
     // If any required data is missing, do not proceed
     if (!fileUri || !socket || !targetIP) {
       console.log('FileSender: Missing fileUri, socket, or targetIP. Aborting send.');
+      return;
+    }
+
+    // Prevent multiple sends
+    if (isSending) {
       return;
     }
 
@@ -51,49 +69,122 @@ const FileSender: React.FC<FileSenderProps> = ({
         const totalChunks = Math.ceil(fileSize / CHUNK_SIZE);
         console.log(`FileSender: Total chunks to send: ${totalChunks}`);
 
-        // Loop through each chunk and send it
-        for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
-          // Calculate start and end byte positions for the chunk
-          const start = chunkIndex * CHUNK_SIZE;
-          const end = Math.min(start + CHUNK_SIZE, fileSize);
-          const length = end - start;
+        // First send a file start message to prepare the receiver
+        const startMessage = JSON.stringify({
+          type: 'FILE_START',
+          fileName,
+          fileSize,
+          totalChunks,
+          chunkSize: CHUNK_SIZE,
+          timestamp: Date.now(),
+        });
 
-          // Read the chunk data as base64 string
-          const chunkData = await RNFS.read(filePath, length, start, 'base64');
-          console.log(`FileSender: Read chunk ${chunkIndex + 1}/${totalChunks}`);
-
-          // Create message object with metadata and chunk data
-          const messageObject = {
-            type: 'FILE_CHUNK',
-            fileName,
-            chunkIndex,
-            totalChunks,
-            data: chunkData,
-          };
-
-          // Convert message object to JSON string
-          const message = JSON.stringify(messageObject);
-
-          // Send the chunk over UDP socket and wait for completion
-          await new Promise<void>((resolve, reject) => {
-            socket.send(Buffer.from(message), 0, message.length, DISCOVERY_PORT, targetIP, (err) => {
-              if (err) {
-                console.error(`FileSender: Error sending chunk ${chunkIndex}:`, err);
-                reject(err);
-              } else {
-                console.log(`FileSender: Successfully sent chunk ${chunkIndex}`);
-                resolve();
-              }
-            });
+        // Send the start message
+        await new Promise<void>((resolve, reject) => {
+          socket.send(Buffer.from(startMessage), 0, startMessage.length, DISCOVERY_PORT, targetIP, (err) => {
+            if (err) {
+              console.error('FileSender: Error sending start message:', err);
+              reject(err);
+            } else {
+              console.log('FileSender: Successfully sent start message');
+              resolve();
+            }
           });
+        });
 
-          // Update progress callback if provided
+        // Wait a moment to ensure the receiver is ready
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        // Use a sliding window approach to send multiple chunks in parallel
+        const WINDOW_SIZE = 10; // Send 10 chunks at a time
+        let windowStart = 0;
+
+        while (windowStart < totalChunks) {
+          const windowEnd = Math.min(windowStart + WINDOW_SIZE, totalChunks);
+          const promises = [];
+
+          // Send a window of chunks in parallel
+          for (let chunkIndex = windowStart; chunkIndex < windowEnd; chunkIndex++) {
+            // Calculate start and end byte positions for the chunk
+            const start = chunkIndex * CHUNK_SIZE;
+            const end = Math.min(start + CHUNK_SIZE, fileSize);
+            const length = end - start;
+
+            // Create a promise for sending this chunk
+            const sendChunkPromise = (async () => {
+              try {
+                // Read the chunk data as base64 string
+                const chunkData = await RNFS.read(filePath, length, start, 'base64');
+
+                // Create message object with metadata and chunk data
+                const messageObject = {
+                  type: 'FILE_CHUNK',
+                  fileName,
+                  chunkIndex,
+                  totalChunks,
+                  chunkSize: length,
+                  data: chunkData,
+                };
+
+                // Convert message object to JSON string
+                const message = JSON.stringify(messageObject);
+
+                // Send the chunk over UDP socket
+                return new Promise<void>((resolve, reject) => {
+                  socket.send(Buffer.from(message), 0, message.length, DISCOVERY_PORT, targetIP, (err) => {
+                    if (err) {
+                      console.error(`FileSender: Error sending chunk ${chunkIndex}:`, err);
+                      reject(err);
+                    } else {
+                      console.log(`FileSender: Sent chunk ${chunkIndex}`);
+                      resolve();
+                    }
+                  });
+                });
+              } catch (error) {
+                console.error(`FileSender: Error processing chunk ${chunkIndex}:`, error);
+                throw error;
+              }
+            })();
+
+            promises.push(sendChunkPromise);
+          }
+
+          // Wait for all chunks in this window to be sent
+          await Promise.all(promises);
+
+          // Update progress
           if (onProgress) {
-            const progressPercent = ((chunkIndex + 1) / totalChunks) * 100;
-            console.log(`FileSender: Progress ${progressPercent.toFixed(2)}%`);
+            const progressPercent = (windowEnd / totalChunks) * 100;
             onProgress(progressPercent);
           }
+
+          // Move to next window
+          windowStart = windowEnd;
+
+          // Small delay between windows to prevent network congestion
+          await new Promise(resolve => setTimeout(resolve, 50));
         }
+
+        // Send a completion message
+        const completeMessage = JSON.stringify({
+          type: 'FILE_COMPLETE',
+          fileName,
+          totalChunks,
+          timestamp: Date.now(),
+        });
+
+        await new Promise<void>((resolve, reject) => {
+          socket.send(Buffer.from(completeMessage), 0, completeMessage.length, DISCOVERY_PORT, targetIP, (err) => {
+            if (err) {
+              console.error('FileSender: Error sending completion message:', err);
+              reject(err);
+            } else {
+              console.log('FileSender: Successfully sent completion message');
+              resolve();
+            }
+          });
+        });
 
         // Call completion callback if provided
         if (onComplete) {
