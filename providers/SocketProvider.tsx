@@ -32,16 +32,16 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const [deviceName] = useState<string>(generateRandomName());
 
     useEffect(() => {
-        console.log('Initializing socket...');
+        // console.log('Initializing socket...');
 
         const udpSocket = dgram.createSocket({ type: 'udp4' });
 
         udpSocket.bind(DISCOVERY_PORT, (err?: Error) => {
             if (err) {
-                console.error('Socket bind failed:', err);
+                // console.error('Socket bind failed:', err);
                 return;
             }
-            console.log(`Socket bound successfully via SocketProvider at ${Date.now().toLocaleString()}`);
+            // console.log(`Socket bound successfully via SocketProvider at ${Date.now().toLocaleString()}`);
 
             udpSocket.setBroadcast(true);
 
@@ -49,7 +49,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         });
 
         return () => {
-            console.log('Closing socket...');
+            // console.log('Closing socket...');
             if (udpSocket) {
                 udpSocket.removeAllListeners();
                 udpSocket.close();

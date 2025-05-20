@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { View, Text, Button, StyleSheet } from 'react-native';
 import { pick } from '@react-native-documents/picker';
@@ -7,13 +8,11 @@ type FilePickerProps = {
 };
 
 const FilePicker: React.FC<FilePickerProps> = ({ onFileSelected }) => {
-
   const pickFile = async () => {
     try {
       const result = await pick({
         type: '*/*',
       });
-      // pick returns an array of files
       if (result.length > 0) {
         const file = result[0];
         if (file.size === null) {
@@ -26,10 +25,9 @@ const FilePicker: React.FC<FilePickerProps> = ({ onFileSelected }) => {
       }
     } catch (error) {
       if (error instanceof Error && error.message === 'User cancelled document picker') {
-        // User cancelled the picker
-        console.log('User cancelled document picker');
+        // console.log('User cancelled document picker');
       } else {
-        console.error('Error picking file:', error);
+        // console.error('Error picking file:', error);
       }
     }
   };

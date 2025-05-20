@@ -28,7 +28,6 @@ const FileTransferScreen: React.FC<Props> = ({ route, navigation }) => {
     const [error, setError] = useState<string | null>(null);
     const [isFileReceived, setIsFileReceived] = useState(false);
 
-    // Check permissions on component mount
     useEffect(() => {
         const checkPermissions = async () => {
             if (Platform.OS === 'android') {
@@ -67,7 +66,7 @@ const FileTransferScreen: React.FC<Props> = ({ route, navigation }) => {
 
                     setPermissionsChecked(true);
                 } catch (err) {
-                    console.error('Error checking permissions:', err);
+                    // console.error('Error checking permissions:', err);
                     setPermissionsChecked(true);
                 }
             } else {
@@ -118,7 +117,7 @@ const FileTransferScreen: React.FC<Props> = ({ route, navigation }) => {
                                 `Name: ${fileName}\nSize: ${(fileInfo.size / 1024).toFixed(2)} KB\nPath: ${filePath}`
                             );
                         } catch (err) {
-                            console.error('Error getting file info:', err);
+                            // console.error('Error getting file info:', err);
                             Alert.alert('Error', 'Could not get file information');
                         }
                     },

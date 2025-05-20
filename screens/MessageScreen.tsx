@@ -6,7 +6,6 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../App';
 import { useSocket, DISCOVERY_PORT } from '../providers/SocketProvider';
 import { Buffer } from 'buffer';
-import Icon from 'react-native-vector-icons/Feather';
 
 type Props = {
     route: RouteProp<RootStackParamList, 'Message'>;
@@ -26,12 +25,11 @@ const MessageScreen: React.FC<Props> = ({ route, navigation }) => {
     const [receivedMessages, setReceivedMessages] = useState<Message[]>([]);
 
     useEffect(() => {
-        // Define message handler
         const handleMessage = (msg: Buffer, rinfo: any) => {
             try {
                 const data = JSON.parse(msg.toString());
                 if (data.type === 'MESSAGE' && rinfo.address === deviceIP) {
-                    console.log(`Received message: ${data.text} from ${rinfo.address}`);
+                    // console.log(`Received message: ${data.text} from ${rinfo.address}`);
                     setReceivedMessages(prev => [
                         ...prev,
                         {
@@ -65,7 +63,6 @@ const MessageScreen: React.FC<Props> = ({ route, navigation }) => {
                         ]
                     );
                 } else if (data.type === 'CHAT_ENDED' && rinfo.address === deviceIP) {
-                    // If the other user ended the chat, show notification and return to main
                     Alert.alert(
                         'Chat Ended',
                         'The other user has ended the chat.',
@@ -73,17 +70,14 @@ const MessageScreen: React.FC<Props> = ({ route, navigation }) => {
                     );
                 }
             } catch (error) {
-                console.error('Error parsing message:', error);
+                // console.error('Error parsing message:', error);
             }
         };
 
-        // First remove any existing listeners to prevent duplicates
         socket?.removeAllListeners('message');
 
-        // Add the message listener
         socket?.on('message', handleMessage);
 
-        // Handle Back Button
         const backAction = () => {
             Alert.alert(
                 'Exit Chat?',
@@ -97,7 +91,6 @@ const MessageScreen: React.FC<Props> = ({ route, navigation }) => {
         };
 
         const handleExit = () => {
-            // Send notification to other user that we're leaving
             if (socket && myIP) {
                 try {
                     const exitMsg = JSON.stringify({
@@ -114,29 +107,24 @@ const MessageScreen: React.FC<Props> = ({ route, navigation }) => {
                         deviceIP,
                         (err) => {
                             if (err) {
-                                console.error('Failed to send exit notification:', err);
+                                // console.error('Failed to send exit notification:', err);
                             } else {
-                                console.log('Exit notification sent');
+                                // console.log('Exit notification sent');
                             }
                         }
                     );
                 } catch (error) {
-                    console.error('Error sending exit notification:', error);
+                    // console.error('Error sending exit notification:', error);
                 }
             }
 
-            // Navigate back to main screen
             navigation.navigate('Main');
         };
 
         BackHandler.addEventListener('hardwareBackPress', backAction);
 
-        // Return cleanup function
         return () => {
-            // Remove the message listener when component unmounts
             socket?.removeListener('message', handleMessage);
-            // BackHandler.removeEventListener is deprecated and not in type definitions
-            // Use remove() method instead if available
             if (BackHandler.remove) {
                 BackHandler.remove('hardwareBackPress', backAction);
             }
@@ -147,20 +135,20 @@ const MessageScreen: React.FC<Props> = ({ route, navigation }) => {
         if (!message.trim() || !myIP) {
             return;
         }
-        console.log(socket);
+        // console.log(socket);
         try {
             const msg = JSON.stringify({
                 type: 'MESSAGE',
                 text: message,
                 sender: myIP,
             });
-            console.log({ status: 'Preprocessing message', msg });
+            // console.log({ status: 'Preprocessing message', msg });
             socket?.send(Buffer.from(msg), 0, msg.length, DISCOVERY_PORT, deviceIP, (err) => {
                 if (err) {
-                    console.error({ status: 'Failed to send message', err });
+                    // console.error({ status: 'Failed to send message', err });
                 }
                 else {
-                    console.log({ status: 'Message sent', msg });
+                    // console.log({ status: 'Message sent', msg });
                 }
             });
 
@@ -170,7 +158,7 @@ const MessageScreen: React.FC<Props> = ({ route, navigation }) => {
             ]);
             setMessage('');
         } catch (error) {
-            console.error('Error sending message:', error);
+            // console.error('Error sending message:', error);
         }
     };
 
@@ -194,14 +182,14 @@ const MessageScreen: React.FC<Props> = ({ route, navigation }) => {
                 targetIP,
                 (err) => {
                     if (err) {
-                        console.error('Failed to send connection response:', err);
+                        // console.error('Failed to send connection response:', err);
                     } else {
-                        console.log(`Connection ${accepted ? 'accepted' : 'declined'}`);
+                        // console.log(`Connection ${accepted ? 'accepted' : 'declined'}`);
                     }
                 }
             );
         } catch (error) {
-            console.error('Error sending connection response:', error);
+            // console.error('Error sending connection response:', error);
         }
     };
 
@@ -253,13 +241,13 @@ const MessageScreen: React.FC<Props> = ({ route, navigation }) => {
                         onPress={sendMessage}
                         disabled={!message.trim()}
                     >
-                        {/* <Icon name="send" size={24} color="#fff" /> */}
+                        <Text>📨</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                         style={styles.attachButton}
                         onPress={() => navigation.navigate('FileTransfer', { deviceIP })}
                     >
-                        <Icon name="send" size={24} color="#fff" />
+                        <Text>📁</Text>
                     </TouchableOpacity>
                 </View>
             </View>

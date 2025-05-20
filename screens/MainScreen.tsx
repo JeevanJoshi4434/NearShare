@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 import React, { useState, useEffect } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Button, Alert } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -5,8 +6,6 @@ import { RootStackParamList } from '../App';
 import { NetworkInfo } from 'react-native-network-info';
 import { Buffer } from 'buffer';
 import { DISCOVERY_PORT, useSocket, getBroadcastAddress } from '../providers/SocketProvider';
-import { generateRandomName } from '../utils/converter';
- 
 
 type Props = {
     navigation: StackNavigationProp<RootStackParamList, 'Main'>;
@@ -23,26 +22,23 @@ const MainScreen: React.FC<Props> = ({ navigation }) => {
     const { socket, deviceName } = useSocket();
 
     useEffect(() => {
-        // Get device IP address (Local IP)
         NetworkInfo.getIPV4Address().then(ip => {
             if (ip) {
-                console.log('My Device IP:', ip);
+                // console.log('My Device IP:', ip);
                 setMyIP(ip);
             }
         });
-        
-        // Define message handler function
+
         const handleMessage = (msg: Buffer, rinfo: any) => {
             try {
                 const data = JSON.parse(msg.toString());
-                
-                // Skip processing messages from self
+
                 if (rinfo.address === myIP) {
                     return;
                 }
-                
-                console.log(`Received ${data.type} from ${rinfo.address}`);
-                
+
+                // console.log(`Received ${data.type} from ${rinfo.address}`);
+
                 if (data.type === 'DISCOVERY_RESPONSE') {
                     setDevices(prev => {
                         const ipFromMessage = data.ip || rinfo.address;
@@ -50,79 +46,71 @@ const MainScreen: React.FC<Props> = ({ navigation }) => {
                         return exists ? prev : [...prev, { ip: ipFromMessage, name: data.deviceName }];
                     });
                 } else if (data.type === 'DISCOVERY') {
-                    // Send response back
-                    const response = JSON.stringify({ 
-                        type: 'DISCOVERY_RESPONSE', 
-                        deviceName, 
-                        ip: myIP 
+
+                    const response = JSON.stringify({
+                        type: 'DISCOVERY_RESPONSE',
+                        deviceName,
+                        ip: myIP,
                     });
-                    
+
                     socket?.send(
-                        Buffer.from(response), 
-                        0, 
-                        response.length, 
-                        DISCOVERY_PORT, 
-                        rinfo.address, 
+                        Buffer.from(response),
+                        0,
+                        response.length,
+                        DISCOVERY_PORT,
+                        rinfo.address,
                         (err) => {
                             if (err) {
-                                console.log('Error sending response:', err);
+                                // console.log('Error sending response:', err);
                             } else {
-                                console.log(`Discovery response sent to ${rinfo.address}`);
+                                // console.log(`Discovery response sent to ${rinfo.address}`);
                             }
                         }
                     );
                 } else if (data.type === 'CONNECTION_REQUEST') {
-                    // Handle connection request in MainScreen
                     Alert.alert(
                         'Connection Request',
                         `${data.senderName || 'Someone'} (${rinfo.address}) wants to connect with you.`,
                         [
-                            { 
-                                text: 'Decline', 
+                            {
+                                text: 'Decline',
                                 style: 'cancel',
-                                onPress: () => sendConnectionResponse(rinfo.address, false) 
+                                onPress: () => sendConnectionResponse(rinfo.address, false)
                             },
-                            { 
-                                text: 'Accept', 
+                            {
+                                text: 'Accept',
                                 onPress: () => {
                                     sendConnectionResponse(rinfo.address, true);
-                                    navigation.navigate('Message', { 
-                                        deviceIP: rinfo.address, 
-                                        myIP 
+                                    navigation.navigate('Message', {
+                                        deviceIP: rinfo.address,
+                                        myIP
                                     });
-                                } 
+                                }
                             },
                         ]
                     );
                 } else if (data.type === 'CHAT_ENDED') {
-                    // If the other user ended the chat, show notification and return to main
                     if (navigation.isFocused()) {
-                        // Only show alert if we're on the main screen
                         Alert.alert(
                             'Chat Ended',
                             `${data.senderName || 'The other user'} has ended the chat.`,
                             [{ text: 'OK' }]
                         );
                     } else {
-                        // If we're in the message screen, navigation will handle this
-                        console.log('Received chat ended notification');
+                        // console.log('Received chat ended notification');
                     }
                 }
             } catch (error) {
-                console.error('Error processing message:', error);
+                // console.error('Error processing message:', error);
             }
         };
-        
-        // First remove any existing listeners to prevent duplicates
+
         socket?.removeAllListeners('message');
-        
-        // Then add the message listener
+
         socket?.on('message', handleMessage);
-        
-        // Return cleanup function
+
         return () => {
-        // Remove the message listener when component unmounts
-        socket?.off('message', handleMessage);
+            socket?.off('message', handleMessage);
         };
     }, [myIP, socket, navigation, deviceName]);
 
@@ -131,32 +119,32 @@ const MainScreen: React.FC<Props> = ({ navigation }) => {
             if (!socket || !myIP) {
                 return;
             }
-            
+
             const broadcastAddress = getBroadcastAddress(myIP);
-            console.log(`Sending discovery request to ${broadcastAddress}...`);
-            
-            const message = JSON.stringify({ 
-                type: 'DISCOVERY', 
+            // console.log(`Sending discovery request to ${broadcastAddress}...`);
+
+            const message = JSON.stringify({
+                type: 'DISCOVERY',
                 deviceName,
-                ip: myIP
+                ip: myIP,
             });
 
             socket.send(
-                Buffer.from(message), 
-                0, 
-                message.length, 
-                DISCOVERY_PORT, 
-                broadcastAddress, 
+                Buffer.from(message),
+                0,
+                message.length,
+                DISCOVERY_PORT,
+                broadcastAddress,
                 (err) => {
                     if (err) {
-                        console.log('Discovery error:', err);
+                        // console.log('Discovery error:', err);
                     } else {
-                        console.log('Discovery request sent!');
+                        // console.log('Discovery request sent!');
                     }
                 }
             );
         } catch (error) {
-            console.error('Error sending discovery request:', error);
+            // console.error('Error sending discovery request:', error);
         }
     };
 
@@ -170,15 +158,17 @@ const MainScreen: React.FC<Props> = ({ navigation }) => {
     };
 
     const sendConnectionResponse = (targetIP: string, accepted: boolean) => {
-        if (!socket || !myIP) return;
-        
+        if (!socket || !myIP) {
+            return;
+        }
+
         try {
             const response = JSON.stringify({
                 type: 'CONNECTION_RESPONSE',
                 accepted,
-                sender: myIP
+                sender: myIP,
             });
-            
+
             socket.send(
                 Buffer.from(response),
                 0,
@@ -187,14 +177,14 @@ const MainScreen: React.FC<Props> = ({ navigation }) => {
                 targetIP,
                 (err) => {
                     if (err) {
-                        console.error('Failed to send connection response:', err);
+                        // console.error('Failed to send connection response:', err);
                     } else {
-                        console.log(`Connection ${accepted ? 'accepted' : 'declined'}`);
+                        // console.log(`Connection ${accepted ? 'accepted' : 'declined'}`);
                     }
                 }
             );
         } catch (error) {
-            console.error('Error sending connection response:', error);
+            // console.error('Error sending connection response:', error);
         }
     };
 
@@ -211,10 +201,10 @@ const MainScreen: React.FC<Props> = ({ navigation }) => {
                     <TouchableOpacity
                         style={styles.deviceItem}
                         onPress={() => {
-                            navigation.navigate('ConnectionRequest', { 
-                                deviceIP: item.ip, 
+                            navigation.navigate('ConnectionRequest', {
+                                deviceIP: item.ip,
                                 deviceName: item.name,
-                                myIP 
+                                myIP,
                             });
                         }}
                     >
@@ -230,7 +220,7 @@ const MainScreen: React.FC<Props> = ({ navigation }) => {
         </View>
     );
 };
- 
+
 
 const styles = StyleSheet.create({
     container: { flex: 1, padding: 20 },
