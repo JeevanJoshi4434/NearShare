@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { Buffer } from 'buffer';
 import RNFS from 'react-native-fs';
 import { useSocket, DISCOVERY_PORT } from '../providers/SocketProvider';
+import { Platform, PermissionsAndroid } from 'react-native';
 
 type FileChunk = {
   chunkIndex: number;
@@ -20,6 +21,9 @@ const FileReceiver = ({ onFileReceived, onProgress, onError }: FileReceiverProps
 
   // State to track the name of the file currently being received
   const [receivingFileName, setReceivingFileName] = useState<string | null>(null);
+  
+  // State to track if permissions are granted
+  const [permissionsGranted, setPermissionsGranted] = useState(false);
 
   // Ref to store received chunks mapped by their index
   const chunksRef = useRef<Map<number, string>>(new Map());
@@ -27,9 +31,59 @@ const FileReceiver = ({ onFileReceived, onProgress, onError }: FileReceiverProps
   // Ref to store total number of chunks expected
   const totalChunksRef = useRef<number>(0);
 
+  // Check permissions on component mount
   useEffect(() => {
-    if (!socket) {
-      console.log('FileReceiver: No socket available, aborting.');
+    const checkPermissions = async () => {
+      if (Platform.OS === 'android') {
+        try {
+          if (Platform.Version >= 33) { // Android 13+
+            const permissions = [
+              PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES,
+              PermissionsAndroid.PERMISSIONS.READ_MEDIA_VIDEO,
+              PermissionsAndroid.PERMISSIONS.READ_MEDIA_AUDIO
+            ];
+            
+            if (Platform.Version >= 34) { // Android 14+
+              permissions.push(PermissionsAndroid.PERMISSIONS.READ_MEDIA_VISUAL_USER_SELECTED);
+            }
+            
+            const results = await PermissionsAndroid.requestMultiple(permissions);
+            
+            const allGranted = Object.values(results).every(
+              result => result === PermissionsAndroid.RESULTS.GRANTED
+            );
+            
+            setPermissionsGranted(allGranted);
+            if (!allGranted) {
+              console.warn('Not all permissions were granted');
+            }
+          } else { // Android 12 and below
+            const granted = await PermissionsAndroid.request(
+              PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE
+            );
+            
+            setPermissionsGranted(granted === PermissionsAndroid.RESULTS.GRANTED);
+            if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+              console.warn('Storage permission denied');
+            }
+          }
+        } catch (err) {
+          console.error('Error requesting permissions:', err);
+          setPermissionsGranted(false);
+          if (onError) onError(err as Error);
+        }
+      } else {
+        // iOS doesn't need these permissions for app directory access
+        setPermissionsGranted(true);
+      }
+    };
+
+    checkPermissions();
+  }, [onError]);
+
+  useEffect(() => {
+    if (!socket || !permissionsGranted) {
+      console.log('FileReceiver: No socket available or permissions not granted, aborting.');
       return;
     }
 
@@ -112,7 +166,7 @@ const FileReceiver = ({ onFileReceived, onProgress, onError }: FileReceiverProps
     return () => {
       socket.off('message', handleMessage);
     };
-  }, [socket, receivingFileName, onFileReceived, onProgress, onError]);
+  }, [socket, receivingFileName, onFileReceived, onProgress, onError, permissionsGranted]);
 
   // This hook does not render any UI
   return null;

@@ -3,10 +3,11 @@ import { View, Text, FlatList, TouchableOpacity, Alert, PermissionsAndroid, Plat
 import RNFS from 'react-native-fs';
 
 type FilePickerProps = {
-  onFileSelected: (uri: string, name: string, size: number) => void;
+  onFileSelected: (uri: string, name: string|null, size: number|null) => void;
 };
 
 const FilePicker: React.FC<FilePickerProps> = ({ onFileSelected }) => {
+
   const [files, setFiles] = useState<RNFS.ReadDirItem[]>([]);
   const [hasPermission, setHasPermission] = useState(false);
 
