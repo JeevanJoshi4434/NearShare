@@ -57,7 +57,7 @@ const App = () => {
               fileUri={selectedFile.uri}
               fileName={selectedFile.name}
               fileSize={selectedFile.size}
-              targetIP="255.255.255.255" // Broadcast IP or replace with actual target IP
+              targetIP="255.255.255.255"
               onProgress={setSendProgress}
               onComplete={handleSendComplete}
               onError={handleSendError}
