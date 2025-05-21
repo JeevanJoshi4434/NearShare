@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Buffer } from 'buffer';
 import RNFS from 'react-native-fs';
 import { DISCOVERY_PORT, useSocket } from '../providers/SocketProvider';
+import { generateEncryptionKey, encryptData } from './encryption';
 
 type FileSenderProps = {
   fileUri: string;
@@ -29,13 +30,8 @@ const FileSender: React.FC<FileSenderProps> = ({
 }) => {
   const { socket } = useSocket();
   const [isSending, setIsSending] = useState(false);
-  const isValidBase64 = (str: string): boolean => {
-    try {
-      return /^[A-Za-z0-9+/]*={0,2}$/.test(str);
-    } catch (e) {
-      return false;
-    }
-  };
+  const [encryptionKey] = useState(() => generateEncryptionKey());
+
   useEffect(() => {
     if (!fileUri || !socket || !targetIP) {
       // console.log('FileSender: Missing fileUri, socket, or targetIP. Aborting send.');
@@ -52,6 +48,8 @@ const FileSender: React.FC<FileSenderProps> = ({
         const filePath = fileUri.startsWith('file://') ? fileUri.slice(7) : fileUri;
         const totalChunks = Math.ceil(fileSize / CHUNK_SIZE);
         // console.log(`FileSender: Total chunks to send: ${totalChunks}`);
+
+        // Send start message with encryption key
         const startMessage = JSON.stringify({
           type: 'FILE_START',
           fileName,
@@ -59,7 +57,9 @@ const FileSender: React.FC<FileSenderProps> = ({
           totalChunks,
           chunkSize: CHUNK_SIZE,
           timestamp: Date.now(),
+          encryptionKey, // Include the encryption key in the initial message
         });
+
         await new Promise<void>((resolve, reject) => {
           socket.send(Buffer.from(startMessage), 0, startMessage.length, DISCOVERY_PORT, targetIP, (err) => {
             if (err) {
@@ -93,6 +93,9 @@ const FileSender: React.FC<FileSenderProps> = ({
               try {
                 // Read the chunk data as base64 string
                 const chunkData = await RNFS.read(filePath, length, start, 'base64');
+                
+                // Encrypt the chunk data
+                const encryptedData = encryptData(chunkData, encryptionKey);
 
                 // Create message object with metadata and chunk data
                 const messageObject = {
@@ -101,7 +104,7 @@ const FileSender: React.FC<FileSenderProps> = ({
                   chunkIndex,
                   totalChunks,
                   chunkSize: length,
-                  data: chunkData,
+                  data: encryptedData, // Send encrypted data
                 };
 
                 const message = JSON.stringify(messageObject);
@@ -177,7 +180,7 @@ const FileSender: React.FC<FileSenderProps> = ({
       }
     };
     sendFile();
-  }, [fileUri, fileName, fileSize, socket, targetIP, onProgress, onComplete, onError]);
+  }, [fileUri, fileName, fileSize, socket, targetIP, onProgress, onComplete, onError, encryptionKey]);
 
   return null;
 };

@@ -133,6 +133,14 @@ const FileTransferScreen: React.FC<Props> = ({ route, navigation }) => {
         setError(`Receive Error: ${err.message}`);
         Alert.alert('Receive Error', err.message);
         setIsReceiving(false);
+        setReceivingProgress(0);
+    };
+
+    const onReceiveCancel = () => {
+        setIsReceiving(false);
+        setReceivingProgress(0);
+        setError(null);
+        Alert.alert('Transfer Cancelled', 'File transfer has been cancelled.');
     };
 
     const handleSendProgress = (value: number) => {
@@ -147,6 +155,28 @@ const FileTransferScreen: React.FC<Props> = ({ route, navigation }) => {
         if (!isReceiving && value > 0) {
             setIsReceiving(true);
         }
+    };
+
+    const handleCancelReceive = () => {
+        Alert.alert(
+            'Cancel Transfer',
+            'Are you sure you want to cancel receiving the file?',
+            [
+                {
+                    text: 'No',
+                    style: 'cancel',
+                },
+                {
+                    text: 'Yes',
+                    style: 'destructive',
+                    onPress: () => {
+                        setIsReceiving(false);
+                        setReceivingProgress(0);
+                    },
+                },
+            ],
+            { cancelable: false }
+        );
     };
 
     const ProgressBar = ({ progress }: { progress: number }) => {
@@ -208,6 +238,12 @@ const FileTransferScreen: React.FC<Props> = ({ route, navigation }) => {
                     <Text style={styles.receivingText}>Receiving file...</Text>
                     <ActivityIndicator size="small" color="#4CAF50" style={styles.activityIndicator} />
                     <ProgressBar progress={receivingProgress} />
+                    <TouchableOpacity
+                        style={styles.cancelButton}
+                        onPress={handleCancelReceive}
+                    >
+                        <Text style={styles.cancelButtonText}>Cancel Transfer</Text>
+                    </TouchableOpacity>
                 </View>
             )}
 
@@ -242,6 +278,7 @@ const FileTransferScreen: React.FC<Props> = ({ route, navigation }) => {
                 onFileReceived={onFileReceived}
                 onProgress={handleReceiveProgress}
                 onError={onReceiveError}
+                onCancel={onReceiveCancel}
             />
         </View>
     );
@@ -386,6 +423,18 @@ const styles = StyleSheet.create({
         color: 'white',
         fontWeight: 'bold',
         fontSize: 16,
+    },
+    cancelButton: {
+        backgroundColor: '#ff5252',
+        padding: 10,
+        borderRadius: 5,
+        marginTop: 10,
+        alignSelf: 'center',
+    },
+    cancelButtonText: {
+        color: 'white',
+        fontSize: 16,
+        fontWeight: 'bold',
     },
 });
 

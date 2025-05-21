@@ -5,14 +5,16 @@ import { Buffer } from 'buffer';
 import RNFS from 'react-native-fs';
 import { useSocket } from '../providers/SocketProvider';
 import { Platform, PermissionsAndroid, Alert, Linking } from 'react-native';
+import { decryptData } from './encryption';
 
 type FileReceiverProps = {
   onFileReceived: (filePath: string, fileName: string) => void;
   onProgress?: (progress: number) => void;
   onError?: (error: Error) => void;
+  onCancel?: () => void;
 };
 
-const FileReceiver = ({ onFileReceived, onProgress, onError }: FileReceiverProps) => {
+const FileReceiver = ({ onFileReceived, onProgress, onError, onCancel }: FileReceiverProps) => {
   const { socket } = useSocket();
 
   const [receivingFileName, setReceivingFileName] = useState<string | null>(null);
@@ -25,6 +27,25 @@ const FileReceiver = ({ onFileReceived, onProgress, onError }: FileReceiverProps
   const missingChunksRef = useRef<Set<number>>(new Set());
   const processingFileRef = useRef<boolean>(false);
   const alertShowingRef = useRef<boolean>(false);
+  const encryptionKeyRef = useRef<string | null>(null);
+  const cancelledRef = useRef<boolean>(false);
+
+  const cancelTransfer = () => {
+    if (processingFileRef.current) {
+      cancelledRef.current = true;
+      setReceivingFileName(null);
+      chunksRef.current.clear();
+      totalChunksRef.current = 0;
+      fileSizeRef.current = 0;
+      missingChunksRef.current.clear();
+      processingFileRef.current = false;
+      encryptionKeyRef.current = null;
+      
+      if (onCancel) {
+        onCancel();
+      }
+    }
+  };
 
   // Check permissions on component mount
   useEffect(() => {
@@ -111,7 +132,7 @@ const FileReceiver = ({ onFileReceived, onProgress, onError }: FileReceiverProps
             }
           }
         } else {
-          // iOS: App-private directories don’t need permissions
+          // iOS: App-private directories don't need permissions
           setPermissionsGranted(true);
           // console.log('iOS - permission not required for app sandbox');
         }
@@ -139,6 +160,10 @@ const FileReceiver = ({ onFileReceived, onProgress, onError }: FileReceiverProps
 
   // Function to assemble and save the file
   const assembleAndSaveFile = async (fileName: string, totalChunks: number) => {
+    if (cancelledRef.current) {
+      return;
+    }
+
     if (!permissionsGranted) {
       // console.error('FileReceiver: Cannot save file - permissions not granted');
       if (!alertShowingRef.current) {
@@ -154,6 +179,14 @@ const FileReceiver = ({ onFileReceived, onProgress, onError }: FileReceiverProps
       }
       return;
     }
+
+    if (!encryptionKeyRef.current) {
+      if (onError) {
+        onError(new Error('No encryption key available'));
+      }
+      return;
+    }
+
     try {
       // console.log(`FileReceiver: Assembling file ${fileName} from ${totalChunks} chunks`);
 
@@ -173,26 +206,53 @@ const FileReceiver = ({ onFileReceived, onProgress, onError }: FileReceiverProps
       // Process chunks in batches for better performance
       const BATCH_SIZE = 10;
       for (let batchStart = 0; batchStart < totalChunks; batchStart += BATCH_SIZE) {
+        if (cancelledRef.current) {
+          // Delete the partial file if cancelled
+          try {
+            await RNFS.unlink(tempFilePath);
+          } catch (error) {
+            // Ignore deletion errors
+          }
+          return;
+        }
+
         const batchEnd = Math.min(batchStart + BATCH_SIZE, totalChunks);
         const batchPromises = [];
+        
         for (let i = batchStart; i < batchEnd; i++) {
-          const chunk = chunksRef.current.get(i);
-          if (chunk) {
-            const writePromise = RNFS.appendFile(tempFilePath, chunk, 'base64')
-              .catch(error => {
-                // console.error(`FileReceiver: Error writing chunk ${i}:`, error);
-                throw new Error(`Error writing chunk ${i}: ${error}`);
-              });
-            batchPromises.push(writePromise);
+          const encryptedChunk = chunksRef.current.get(i);
+          if (encryptedChunk) {
+            try {
+              // Decrypt the chunk before writing
+              const decryptedChunk = decryptData(encryptedChunk, encryptionKeyRef.current);
+              const writePromise = RNFS.appendFile(tempFilePath, decryptedChunk, 'base64')
+                .catch(error => {
+                  throw new Error(`Error writing chunk ${i}: ${error}`);
+                });
+              batchPromises.push(writePromise);
+            } catch (error) {
+              throw new Error(`Error decrypting chunk ${i}: ${error}`);
+            }
           }
         }
-        // Wait for all chunks in this batch to be written
+
         await Promise.all(batchPromises);
         if (onProgress) {
           const progressPercent = (batchEnd / totalChunks) * 100;
           onProgress(progressPercent);
         }
       }
+
+      if (cancelledRef.current) {
+        // Delete the file if cancelled
+        try {
+          await RNFS.unlink(tempFilePath);
+        } catch (error) {
+          // Ignore deletion errors
+        }
+        return;
+      }
+
       // After file is assembled, save it to a public location
       if (Platform.OS === 'android') {
         try {
@@ -242,8 +302,14 @@ const FileReceiver = ({ onFileReceived, onProgress, onError }: FileReceiverProps
       return;
     }
 
+    cancelledRef.current = false;
+
     // Handler for incoming UDP messages
     const handleMessage = async (msg: Buffer) => {
+      if (cancelledRef.current) {
+        return;
+      }
+
       try {
         const data = JSON.parse(msg.toString());
         if (data.type === 'FILE_START') {
@@ -255,6 +321,7 @@ const FileReceiver = ({ onFileReceived, onProgress, onError }: FileReceiverProps
           chunksRef.current.clear();
           processingFileRef.current = true;
           missingChunksRef.current = new Set();
+          encryptionKeyRef.current = data.encryptionKey;
           for (let i = 0; i < totalChunks; i++) {
             missingChunksRef.current.add(i);
           }
@@ -262,7 +329,7 @@ const FileReceiver = ({ onFileReceived, onProgress, onError }: FileReceiverProps
             onProgress(0);
           }
         }
-        else if (data.type === 'FILE_CHUNK' && processingFileRef.current) {
+        else if (data.type === 'FILE_CHUNK' && processingFileRef.current && !cancelledRef.current) {
           const { fileName, chunkIndex, totalChunks, data: chunkData } = data;
           if (!isValidBase64(chunkData)) {
             // console.error(`FileReceiver: Invalid base64 data in chunk ${chunkIndex}`);
@@ -278,7 +345,7 @@ const FileReceiver = ({ onFileReceived, onProgress, onError }: FileReceiverProps
             onProgress(progressPercent);
           }
         }
-        else if (data.type === 'FILE_COMPLETE' && processingFileRef.current) {
+        else if (data.type === 'FILE_COMPLETE' && processingFileRef.current && !cancelledRef.current) {
           const { fileName, totalChunks } = data;
 
           // console.log(`FileReceiver: File transfer complete signal received for ${fileName}`);
@@ -294,6 +361,7 @@ const FileReceiver = ({ onFileReceived, onProgress, onError }: FileReceiverProps
             fileSizeRef.current = 0;
             missingChunksRef.current.clear();
             processingFileRef.current = false;
+            encryptionKeyRef.current = null;
           } else {
             // console.error(`FileReceiver: Missing ${missingChunksRef.current.size} chunks after completion signal`);
 
@@ -308,6 +376,7 @@ const FileReceiver = ({ onFileReceived, onProgress, onError }: FileReceiverProps
             fileSizeRef.current = 0;
             missingChunksRef.current.clear();
             processingFileRef.current = false;
+            encryptionKeyRef.current = null;
           }
         }
       } catch (error) {
@@ -322,6 +391,7 @@ const FileReceiver = ({ onFileReceived, onProgress, onError }: FileReceiverProps
         fileSizeRef.current = 0;
         missingChunksRef.current.clear();
         processingFileRef.current = false;
+        encryptionKeyRef.current = null;
       }
     };
 
@@ -329,8 +399,12 @@ const FileReceiver = ({ onFileReceived, onProgress, onError }: FileReceiverProps
 
     return () => {
       socket.removeListener('message', handleMessage);
+      // Clean up if component unmounts during transfer
+      if (processingFileRef.current) {
+        cancelTransfer();
+      }
     };
-  }, [socket, permissionsGranted, onFileReceived, onProgress, onError]);
+  }, [socket, permissionsGranted, onFileReceived, onProgress, onError, onCancel]);
 
   return null;
 };
