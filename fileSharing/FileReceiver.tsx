@@ -5,7 +5,6 @@ import { Buffer } from 'buffer';
 import RNFS from 'react-native-fs';
 import { useSocket } from '../providers/SocketProvider';
 import { Platform, PermissionsAndroid, Alert, Linking } from 'react-native';
-import { CameraRoll } from '@react-native-camera-roll/camera-roll';
 
 type FileReceiverProps = {
   onFileReceived: (filePath: string, fileName: string) => void;

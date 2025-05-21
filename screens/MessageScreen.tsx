@@ -125,9 +125,7 @@ const MessageScreen: React.FC<Props> = ({ route, navigation }) => {
 
         return () => {
             socket?.removeListener('message', handleMessage);
-            if (BackHandler.remove) {
-                BackHandler.remove('hardwareBackPress', backAction);
-            }
+            
         };
     }, [socket, navigation, deviceIP, myIP, deviceName]);
 
